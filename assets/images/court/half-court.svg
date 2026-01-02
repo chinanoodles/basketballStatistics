@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="500" height="470" viewBox="0 0 500 470" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <style type="text/css">
+      .court-floor { fill: #D2B48C; } /* 木地板颜色 */
+      .court-lines { fill: none; stroke: #FFFFFF; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;} /* 线条颜色和宽度 */
+      .court-paint { fill: #C19A6B; } /* 油漆区颜色，稍微深一点的木色 */
+      .basket-ring { fill: none; stroke: #FF4500; stroke-width: 3; } /* 篮筐颜色 */
+      .dashed-line { stroke-dasharray: 8,8; } /* 虚线样式 */
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="500" height="470" class="court-floor"/>
+
+  <rect x="168.5" y="277" width="163" height="193" class="court-paint" stroke="none"/>
+
+  <g class="court-lines">
+    <polyline points="0,0 0,470 500,470 500,0"/>
+    
+    <line x1="0" y1="0" x2="500" y2="0"/>
+
+    <path d="M 190 0 A 60 60 0 0 0 310 0"/>
+
+    <path d="M 30 470 L 30 370.4 A 225 225 0 0 1 470 370.4 L 470 470"/>
+
+    <rect x="168.5" y="277" width="163" height="193"/>
+
+    <line x1="168.5" y1="277" x2="331.5" y2="277"/>
+
+    <path d="M 168.5 277 A 60 60 0 0 1 331.5 277"/>
+    
+    <path d="M 331.5 277 A 60 60 0 0 1 168.5 277" class="dashed-line"/>
+
+    <path d="M 208 470 L 208 417.5 A 42 42 0 0 1 292 417.5 L 292 470"/>
+
+    <line x1="220" y1="430" x2="280" y2="430" stroke-width="4"/>
+  </g>
+
+  <g>
+      <line x1="250" y1="430" x2="250" y2="433" stroke="#FFFFFF" stroke-width="5"/>
+      <circle cx="250" cy="417.5" r="7.5" class="basket-ring"/>
+  </g>
+
+</svg>

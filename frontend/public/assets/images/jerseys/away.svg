@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="100" viewBox="0 0 80 100">
+  <!-- 球衣主体 -->
+  <path d="M 20 10 L 60 10 L 65 15 L 65 85 L 60 90 L 20 90 L 15 85 L 15 15 Z" fill="#FF6B6B" stroke="#DC2626" stroke-width="2"/>
+  <!-- V领 -->
+  <path d="M 30 15 L 40 25 L 50 15" fill="none" stroke="#DC2626" stroke-width="2"/>
+  <!-- 号码区域 -->
+  <circle cx="40" cy="50" r="18" fill="white" opacity="0.3"/>
+  <!-- 号码占位 -->
+  <text x="40" y="58" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#7F1D1D" text-anchor="middle">#</text>
+</svg>
+
