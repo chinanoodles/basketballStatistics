@@ -1,11 +1,13 @@
 """统计API路由"""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
 from app.models.statistic import Statistic
-from app.models.game import Game
+from app.models.game import Game, SeasonType
 from app.models.player import Player
+from app.models.user import User
+from app.core.dependencies import get_current_active_user, get_current_league_id, get_current_role
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -42,12 +44,42 @@ class StatisticResponse(BaseModel):
 
 
 @router.post("/", response_model=StatisticResponse)
-async def create_statistic(statistic: StatisticCreate, db: Session = Depends(get_db)):
+async def create_statistic(
+    statistic: StatisticCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """记录统计数据"""
     # 验证比赛是否存在
     game = db.query(Game).filter(Game.id == statistic.game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="比赛不存在")
+    
+    # 权限检查：普通用户只能在自己league的比赛中记录统计
+    current_league_id = get_current_league_id(current_user)
+    current_role = get_current_role(current_user)
+    
+    if current_role != "admin":
+        # 如果用户切换了league，检查是否匹配
+        if current_league_id and hasattr(current_user, '_temp_league_id') and current_user._temp_league_id is not None:
+            if game.league_id != current_league_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="没有权限在此比赛中记录统计"
+                )
+        else:
+            # 用户没有切换league，检查是否在用户的所有league中
+            league_ids = set()
+            if current_user.leagues:
+                league_ids.update([league.id for league in current_user.leagues])
+            if current_user.league_id:
+                league_ids.add(current_user.league_id)
+            
+            if game.league_id not in league_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="没有权限在此比赛中记录统计"
+                )
     
     # 验证球员是否存在
     player = db.query(Player).filter(Player.id == statistic.player_id).first()
@@ -68,18 +100,142 @@ async def create_statistic(statistic: StatisticCreate, db: Session = Depends(get
 
 
 @router.get("/game/{game_id}", response_model=List[StatisticResponse])
-async def get_game_statistics(game_id: int, db: Session = Depends(get_db)):
+async def get_game_statistics(
+    game_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """获取比赛的所有统计数据"""
+    # 验证比赛是否存在
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="比赛不存在")
+    
+    # 权限检查：普通用户只能查看自己league的比赛统计
+    current_league_id = get_current_league_id(current_user)
+    current_role = get_current_role(current_user)
+    
+    if current_role != "admin":
+        # 如果用户切换了league，检查是否匹配
+        if current_league_id and hasattr(current_user, '_temp_league_id') and current_user._temp_league_id is not None:
+            # 用户切换了league，只允许访问当前选择的league
+            if game.league_id != current_league_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="没有权限访问此比赛统计"
+                )
+        else:
+            # 用户没有切换league，检查是否在用户的所有league中
+            league_ids = set()
+            if current_user.leagues:
+                league_ids.update([league.id for league in current_user.leagues])
+            if current_user.league_id:
+                league_ids.add(current_user.league_id)
+            
+            if game.league_id not in league_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="没有权限访问此比赛统计"
+                )
+    
     statistics = db.query(Statistic).filter(Statistic.game_id == game_id).all()
     return statistics
 
 
 @router.get("/game/{game_id}/player/{player_id}", response_model=List[StatisticResponse])
-async def get_player_statistics(game_id: int, player_id: int, db: Session = Depends(get_db)):
+async def get_player_statistics(
+    game_id: int,
+    player_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """获取球员在比赛中的统计数据"""
+    # 验证比赛是否存在
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="比赛不存在")
+    
+    # 权限检查：普通用户只能查看自己league的比赛统计
+    current_league_id = get_current_league_id(current_user)
+    current_role = get_current_role(current_user)
+    
+    if current_role != "admin":
+        # 如果用户切换了league，检查是否匹配
+        if current_league_id and hasattr(current_user, '_temp_league_id') and current_user._temp_league_id is not None:
+            if game.league_id != current_league_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="没有权限访问此比赛统计"
+                )
+        else:
+            # 用户没有切换league，检查是否在用户的所有league中
+            league_ids = set()
+            if current_user.leagues:
+                league_ids.update([league.id for league in current_user.leagues])
+            if current_user.league_id:
+                league_ids.add(current_user.league_id)
+            
+            if game.league_id not in league_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="没有权限访问此比赛统计"
+                )
+    
     statistics = db.query(Statistic).filter(
         Statistic.game_id == game_id,
         Statistic.player_id == player_id
     ).all()
+    return statistics
+
+
+@router.get("/league/{league_id}", response_model=List[StatisticResponse])
+async def get_league_statistics(
+    league_id: int,
+    season_type: Optional[str] = Query(None, description="赛季类型: regular 或 playoff"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """获取联赛的所有统计数据（支持按season_type筛选）"""
+    # 权限检查：普通用户只能查看自己league的统计
+    current_league_id = get_current_league_id(current_user)
+    current_role = get_current_role(current_user)
+    
+    if current_role != "admin":
+        # 如果用户切换了league，只允许访问当前选择的league
+        if current_league_id and hasattr(current_user, '_temp_league_id') and current_user._temp_league_id is not None:
+            if league_id != current_league_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="没有权限访问此联赛统计"
+                )
+        else:
+            # 用户没有切换league，检查是否在用户的所有league中
+            league_ids = set()
+            if current_user.leagues:
+                league_ids.update([league.id for league in current_user.leagues])
+            if current_user.league_id:
+                league_ids.add(current_user.league_id)
+            
+            if league_id not in league_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="没有权限访问此联赛统计"
+                )
+    
+    # 构建查询：通过Game关联查询
+    query = db.query(Statistic).join(Game).filter(Game.league_id == league_id)
+    
+    # 按season_type筛选
+    if season_type:
+        if season_type not in ["regular", "playoff"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="season_type 必须是 'regular' 或 'playoff'"
+            )
+        query = query.filter(
+            Game.season_type == (SeasonType.REGULAR if season_type == "regular" else SeasonType.PLAYOFF)
+        )
+    
+    statistics = query.order_by(Statistic.timestamp.desc()).all()
     return statistics
 

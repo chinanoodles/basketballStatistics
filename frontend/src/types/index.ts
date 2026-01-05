@@ -4,6 +4,7 @@ export interface Team {
   id: number;
   name: string;
   logo?: string;
+  league_id: number;
   created_at?: string;
 }
 
@@ -48,4 +49,37 @@ export type ActionType =
   | 'OREB' | 'DREB' 
   | 'AST' | 'STL' | 'BLK' | 'TOV' | 'PF' | 'PFD'
   | 'SUB_IN' | 'SUB_OUT';
+
+export interface User {
+  id: number;
+  username: string;
+  email?: string | null;
+  role: 'player' | 'team_admin' | 'admin';
+  league_id?: number | null;
+  league_ids?: number[] | null;  // 多league支持
+  is_active: boolean;
+}
+
+export interface League {
+  id: number;
+  name: string;
+  description?: string | null;
+  regular_season_name: string;
+  playoff_name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface Game {
+  id: number;
+  league_id: number;
+  home_team_id: number;
+  away_team_id: number;
+  date: string;
+  duration: number;
+  quarters: number;
+  status: 'pending' | 'live' | 'paused' | 'finished';
+  season_type: 'regular' | 'playoff';
+}
 

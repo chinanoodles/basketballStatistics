@@ -19,6 +19,11 @@ pillow==10.1.0
 python-dateutil==2.8.2
 python-dotenv==1.0.0
 
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+email-validator>=2.0.0
+
 # CORS (内置在FastAPI中，无需单独安装)
 
 # Development

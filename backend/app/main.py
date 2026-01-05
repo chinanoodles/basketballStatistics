@@ -4,7 +4,9 @@ FastAPI应用主入口
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import teams, players, games, statistics, player_time
+# 导入所有模型以确保表被创建
+from app.models import user_league  # 确保user_league_association表被创建
+from app.api import teams, players, games, statistics, player_time, auth, leagues, users
 
 app = FastAPI(
     title="篮球比赛统计API",
@@ -37,6 +39,9 @@ else:
     )
 
 # 注册路由
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["认证"])
+app.include_router(leagues.router, prefix="/api/v1/leagues", tags=["联赛"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["用户管理"])
 app.include_router(teams.router, prefix="/api/v1/teams", tags=["球队"])
 app.include_router(players.router, prefix="/api/v1/players", tags=["球员"])
 app.include_router(games.router, prefix="/api/v1/games", tags=["比赛"])

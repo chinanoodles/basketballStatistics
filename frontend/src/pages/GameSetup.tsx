@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { teamsApi, playersApi, gamesApi } from '../utils/api';
-import { Team, Player } from '../types';
+import { teamsApi, playersApi, gamesApi, leaguesApi } from '../utils/api';
+import { Team, Player, League } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 function GameSetup() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [homeTeam, setHomeTeam] = useState<Team | null>(null);
   const [awayTeam, setAwayTeam] = useState<Team | null>(null);
@@ -15,10 +17,21 @@ function GameSetup() {
   const [duration, setDuration] = useState(40);
   const [quarters, setQuarters] = useState(4);
   const [gameDate, setGameDate] = useState(new Date().toISOString().slice(0, 16));
+  const [seasonType, setSeasonType] = useState<'regular' | 'playoff'>('regular');
+  const [league, setLeague] = useState<League | null>(null);
 
   useEffect(() => {
     loadTeams();
-  }, []);
+    if (user?.league_id) {
+      leaguesApi.getById(user.league_id)
+        .then((response) => {
+          setLeague(response.data);
+        })
+        .catch((error) => {
+          console.error('加载联赛信息失败:', error);
+        });
+    }
+  }, [user]);
 
   useEffect(() => {
     if (homeTeam) {
@@ -95,6 +108,7 @@ function GameSetup() {
         date: gameDate,
         duration,
         quarters,
+        season_type: seasonType,
         player_ids: [...selectedHomePlayers, ...selectedAwayPlayers],
       });
 
@@ -220,7 +234,7 @@ function GameSetup() {
         {/* 比赛配置 */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">比赛配置</h2>
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">比赛日期</label>
               <input
@@ -229,6 +243,17 @@ function GameSetup() {
                 onChange={(e) => setGameDate(e.target.value)}
                 className="w-full p-2 border rounded"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">比赛类型</label>
+              <select
+                value={seasonType}
+                onChange={(e) => setSeasonType(e.target.value as 'regular' | 'playoff')}
+                className="w-full p-2 border rounded"
+              >
+                <option value="regular">{league?.regular_season_name || '小组赛'}</option>
+                <option value="playoff">{league?.playoff_name || '季后赛'}</option>
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">比赛时长 (分钟)</label>

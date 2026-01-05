@@ -24,6 +24,61 @@ function TeamsList() {
     }
   };
 
+  const handleDelete = async (teamId: number, teamName: string) => {
+    try {
+      // 先检查是否有相关比赛
+      let relatedGamesCount = 0;
+      try {
+        const relatedGamesResponse = await teamsApi.getRelatedGames(teamId);
+        relatedGamesCount = relatedGamesResponse.data.count;
+      } catch (error) {
+        // 如果获取相关比赛失败，继续执行删除流程
+        console.error('获取相关比赛失败:', error);
+      }
+
+      let cascadeDelete = false;
+      let confirmMessage = `确定要删除球队"${teamName}"吗？\n\n注意：删除球队将同时删除该球队的所有球员数据。`;
+
+      if (relatedGamesCount > 0) {
+        confirmMessage += `\n\n该球队还有 ${relatedGamesCount} 场相关比赛。`;
+        const userChoice = window.confirm(
+          confirmMessage + '\n\n是否同时删除这些比赛？\n\n点击"确定"删除球队和相关比赛\n点击"取消"只删除球队（如果可能）'
+        );
+        
+        if (!userChoice) {
+          // 用户取消删除
+          return;
+        }
+        
+        // 询问是否级联删除
+        cascadeDelete = window.confirm(
+          `警告：这将删除 ${relatedGamesCount} 场相关比赛及其所有统计数据。\n\n此操作不可恢复！\n\n确定要继续吗？`
+        );
+        
+        if (!cascadeDelete) {
+          // 用户不想级联删除，提示无法删除
+          alert(`无法删除球队：该球队还有 ${relatedGamesCount} 场相关比赛。请先删除相关比赛后再删除球队。`);
+          return;
+        }
+      } else {
+        // 没有相关比赛，直接确认删除
+        if (!window.confirm(confirmMessage + '\n\n此操作不可恢复！')) {
+          return;
+        }
+      }
+
+      // 执行删除
+      const response = await teamsApi.delete(teamId, cascadeDelete);
+      const message = response.data?.message || '球队已删除';
+      alert(message);
+      await loadTeams();
+    } catch (error: any) {
+      console.error('删除球队失败:', error);
+      const errorMessage = error.response?.data?.detail || '删除球队失败，请重试';
+      alert(errorMessage);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -73,19 +128,33 @@ function TeamsList() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {teams.map((team) => (
-              <Link
+              <div
                 key={team.id}
-                to={`/team/${team.id}/edit`}
-                className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-all transform hover:scale-105"
+                className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-all relative"
               >
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xl font-semibold text-gray-800">{team.name}</h3>
-                  <span className="text-gray-400 text-2xl">→</span>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDelete(team.id, team.name);
+                    }}
+                    className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                    title="删除球队"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                 </div>
-                <div className="text-sm text-gray-500">
-                  点击编辑球队信息
-                </div>
-              </Link>
+                <Link
+                  to={`/team/${team.id}/edit`}
+                  className="block text-sm text-gray-500 hover:text-blue-600 transition-colors"
+                >
+                  点击编辑球队信息 →
+                </Link>
+              </div>
             ))}
           </div>
         )}

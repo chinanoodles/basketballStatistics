@@ -14,21 +14,35 @@ class GameStatus(str, enum.Enum):
     FINISHED = "finished"  # 已结束
 
 
+class SeasonType(str, enum.Enum):
+    """赛季类型"""
+    REGULAR = "regular"  # 小组赛/常规赛
+    PLAYOFF = "playoff"  # 季后赛/淘汰赛
+
+
 class Game(Base):
     """比赛模型"""
     __tablename__ = "games"
 
     id = Column(Integer, primary_key=True, index=True)
+    league_id = Column(Integer, ForeignKey("leagues.id"), nullable=False, index=True)  # 所属联赛
     home_team_id = Column(Integer, ForeignKey("teams.id"), nullable=False, index=True)
     away_team_id = Column(Integer, ForeignKey("teams.id"), nullable=False, index=True)
     date = Column(DateTime(timezone=True), nullable=False)
     duration = Column(Integer, nullable=False, default=40)  # 比赛时长（分钟）
     quarters = Column(Integer, nullable=False, default=4)  # 节数
     status = Column(Enum(GameStatus), default=GameStatus.PENDING, nullable=False)
+    season_type = Column(
+        Enum(SeasonType, values_callable=lambda obj: [e.value for e in obj]),
+        default=SeasonType.REGULAR,
+        nullable=False,
+        index=True
+    )  # 赛季类型
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # 关系
+    league = relationship("League", back_populates="games")
     home_team = relationship("Team", foreign_keys=[home_team_id], back_populates="home_games")
     away_team = relationship("Team", foreign_keys=[away_team_id], back_populates="away_games")
     game_players = relationship("GamePlayer", back_populates="game", cascade="all, delete-orphan")
@@ -36,7 +50,7 @@ class Game(Base):
     player_times = relationship("PlayerTime", back_populates="game", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
-        return f"<Game(id={self.id}, home={self.home_team_id}, away={self.away_team_id})>"
+        return f"<Game(id={self.id}, home={self.home_team_id}, away={self.away_team_id}, season_type={self.season_type})>"
 
 
 class GamePlayer(Base):

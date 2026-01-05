@@ -1,5 +1,5 @@
 """球员出场时间API路由"""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -7,6 +7,8 @@ from app.database import get_db
 from app.models.player_time import PlayerTime
 from app.models.game import Game
 from app.models.player import Player
+from app.models.user import User
+from app.core.dependencies import get_current_active_user, get_current_league_id, get_current_role
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -40,13 +42,23 @@ async def player_enter(
     game_id: int,
     player_id: int,
     quarter: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """记录球员上场"""
     # 验证比赛和球员
     game = db.query(Game).filter(Game.id == game_id).first()
     if not game:
         raise HTTPException(status_code=404, detail="比赛不存在")
+    
+    # 权限检查：普通用户只能在自己league的比赛中操作
+    current_league_id = get_current_league_id(current_user)
+    current_role = get_current_role(current_user)
+    if current_role != "admin" and game.league_id != current_league_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="没有权限操作此比赛"
+        )
     
     player = db.query(Player).filter(Player.id == player_id).first()
     if not player:
@@ -79,9 +91,24 @@ async def player_enter(
 async def player_exit(
     game_id: int,
     player_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """记录球员下场"""
+    # 验证比赛权限
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="比赛不存在")
+    
+    # 权限检查：普通用户只能在自己league的比赛中操作
+    current_league_id = get_current_league_id(current_user)
+    current_role = get_current_role(current_user)
+    if current_role != "admin" and game.league_id != current_league_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="没有权限操作此比赛"
+        )
+    
     # 查找未结束的上场记录
     player_time = db.query(PlayerTime).filter(
         PlayerTime.game_id == game_id,
@@ -108,9 +135,22 @@ async def player_exit(
 async def get_player_time(
     game_id: int,
     player_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """获取球员在比赛中的出场时间记录"""
+    # 验证比赛权限
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="比赛不存在")
+    
+    # 权限检查：普通用户只能查看自己league的比赛数据
+    if current_user.role.value != "admin" and game.league_id != current_user.league_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="没有权限访问此比赛数据"
+        )
+    
     times = db.query(PlayerTime).filter(
         PlayerTime.game_id == game_id,
         PlayerTime.player_id == player_id
@@ -121,11 +161,24 @@ async def get_player_time(
 @router.get("/game/{game_id}/total")
 async def get_all_players_time(
     game_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """获取比赛中所有球员的总出场时间和上场状态"""
     from sqlalchemy import func as sql_func
     from datetime import datetime
+    
+    # 验证比赛权限
+    game = db.query(Game).filter(Game.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="比赛不存在")
+    
+    # 权限检查：普通用户只能查看自己league的比赛数据
+    if current_user.role.value != "admin" and game.league_id != current_user.league_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="没有权限访问此比赛数据"
+        )
     
     # 查询所有出场时间记录
     times = db.query(

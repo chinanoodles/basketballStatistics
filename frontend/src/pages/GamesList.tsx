@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { gamesApi, teamsApi } from '../utils/api';
-import { Game } from '../types';
+import { gamesApi, teamsApi, leaguesApi } from '../utils/api';
+import { Game, League } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface GameWithTeams extends Game {
   home_team_name?: string;
@@ -12,15 +13,29 @@ interface GameWithTeams extends Game {
 
 function GamesList() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [games, setGames] = useState<GameWithTeams[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'finished' | 'live' | 'pending'>('all');
   const [selectedGames, setSelectedGames] = useState<Set<number>>(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
+  const [league, setLeague] = useState<League | null>(null);
 
   useEffect(() => {
     loadGames();
+    loadLeague();
   }, [filter]);
+
+  const loadLeague = async () => {
+    if (user?.league_id) {
+      try {
+        const response = await leaguesApi.getById(user.league_id);
+        setLeague(response.data);
+      } catch (error) {
+        console.error('加载联赛信息失败:', error);
+      }
+    }
+  };
 
   const loadGames = async () => {
     try {
@@ -105,6 +120,22 @@ function GamesList() {
         return '已暂停';
       default:
         return '待开始';
+    }
+  };
+
+  const getSeasonTypeLabel = (seasonType: 'regular' | 'playoff') => {
+    if (seasonType === 'regular') {
+      return league?.regular_season_name || '小组赛';
+    } else {
+      return league?.playoff_name || '季后赛';
+    }
+  };
+
+  const getSeasonTypeColor = (seasonType: 'regular' | 'playoff') => {
+    if (seasonType === 'regular') {
+      return 'bg-green-100 text-green-700';
+    } else {
+      return 'bg-orange-100 text-orange-700';
     }
   };
 
@@ -310,6 +341,11 @@ function GamesList() {
                       <span className={`px-3 py-1 rounded-full text-white text-sm ${getStatusColor(game.status)}`}>
                         {getStatusText(game.status)}
                       </span>
+                      {game.season_type && (
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getSeasonTypeColor(game.season_type)}`}>
+                          {getSeasonTypeLabel(game.season_type)}
+                        </span>
+                      )}
                       <span className="text-gray-500 text-sm">
                         {new Date(game.date).toLocaleDateString('zh-CN')}
                       </span>

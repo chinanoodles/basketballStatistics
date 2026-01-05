@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { statisticsApi, teamsApi, gamesApi, playersApi } from '../utils/api';
-import { Player, Team, Statistic } from '../types';
+import { statisticsApi, teamsApi, gamesApi, playersApi, leaguesApi } from '../utils/api';
+import { Player, Team, Statistic, League } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface PlayerStats {
   player: Player;
@@ -37,6 +38,7 @@ interface TeamStats {
 
 function Statistics() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [season, setSeason] = useState('26/27');
   const [viewMode, setViewMode] = useState<'players' | 'teams'>('players');
   const [playerStats, setPlayerStats] = useState<PlayerStats[]>([]);
@@ -45,10 +47,25 @@ function Statistics() {
   const [sortBy, setSortBy] = useState<keyof PlayerStats>('points');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [dataMode, setDataMode] = useState<'total' | 'average'>('total'); // 累积数据或场均数据
+  const [seasonType, setSeasonType] = useState<'all' | 'regular' | 'playoff'>('all'); // 赛季类型筛选
+  const [league, setLeague] = useState<League | null>(null);
+
+  // 加载联赛信息
+  useEffect(() => {
+    if (user?.league_id) {
+      leaguesApi.getById(user.league_id)
+        .then((response) => {
+          setLeague(response.data);
+        })
+        .catch((error) => {
+          console.error('加载联赛信息失败:', error);
+        });
+    }
+  }, [user]);
 
   useEffect(() => {
     loadStatistics();
-  }, [season, viewMode, dataMode]);
+  }, [season, viewMode, dataMode, seasonType]);
 
   const loadStatistics = async () => {
     try {
@@ -68,8 +85,9 @@ function Statistics() {
 
   const loadPlayerStatistics = async () => {
     try {
-      // 获取所有比赛（可以根据赛季筛选）
-      const gamesResponse = await gamesApi.getAll();
+      // 获取所有比赛（根据season_type筛选）
+      const seasonTypeParam = seasonType === 'all' ? undefined : seasonType;
+      const gamesResponse = await gamesApi.getAll(seasonTypeParam);
       const games = gamesResponse.data.filter((g: any) => g.status === 'finished');
 
       // 获取所有球队
@@ -345,6 +363,23 @@ function Statistics() {
             </button>
             <h1 className="text-2xl font-bold text-gray-800">技术统计</h1>
             <div className="flex items-center gap-4">
+              {/* 赛季类型筛选 */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-700">数据分类：</span>
+                <select
+                  value={seasonType}
+                  onChange={(e) => setSeasonType(e.target.value as 'all' | 'regular' | 'playoff')}
+                  className="px-4 py-2 border rounded-lg bg-white"
+                >
+                  <option value="all">整体数据</option>
+                  <option value="regular">
+                    {league?.regular_season_name || '常规赛/小组赛'}
+                  </option>
+                  <option value="playoff">
+                    {league?.playoff_name || '季后赛'}
+                  </option>
+                </select>
+              </div>
               <select
                 value={season}
                 onChange={(e) => setSeason(e.target.value)}
@@ -384,28 +419,47 @@ function Statistics() {
           <div className="bg-white rounded-lg shadow-lg overflow-hidden">
             {/* 数据模式切换 */}
             <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-700">数据模式：</span>
-                <button
-                  onClick={() => setDataMode('total')}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium ${
-                    dataMode === 'total'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  累积数据
-                </button>
-                <button
-                  onClick={() => setDataMode('average')}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium ${
-                    dataMode === 'average'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  场均数据
-                </button>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700">数据模式：</span>
+                  <button
+                    onClick={() => setDataMode('total')}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium ${
+                      dataMode === 'total'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    累积数据
+                  </button>
+                  <button
+                    onClick={() => setDataMode('average')}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium ${
+                      dataMode === 'average'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    场均数据
+                  </button>
+                </div>
+                {/* 当前查看的数据类型标签 */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">当前查看：</span>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    seasonType === 'all'
+                      ? 'bg-purple-100 text-purple-700'
+                      : seasonType === 'regular'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-orange-100 text-orange-700'
+                  }`}>
+                    {seasonType === 'all'
+                      ? '整体数据'
+                      : seasonType === 'regular'
+                      ? (league?.regular_season_name || '常规赛/小组赛')
+                      : (league?.playoff_name || '季后赛')}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="overflow-x-auto">
