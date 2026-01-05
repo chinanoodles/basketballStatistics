@@ -51,11 +51,19 @@ api.interceptors.response.use(
 export const teamsApi = {
   getAll: () => api.get('/teams/'),
   getById: (id: number) => api.get(`/teams/${id}`),
-  create: (data: { name: string; logo?: string; league_id?: number }) => api.post('/teams/', data),
-  update: (id: number, data: { name: string; logo?: string; league_id?: number }) => api.put(`/teams/${id}`, data),
+  create: (data: { name: string; logo?: string; league_id?: number; team_admin_id?: number | null }) => api.post('/teams/', data),
+  update: (id: number, data: { name: string; logo?: string; league_id?: number; team_admin_id?: number | null }) => api.put(`/teams/${id}`, data),
   delete: (id: number, cascadeDeleteGames: boolean = false) => 
     api.delete(`/teams/${id}`, { params: { cascade_delete_games: cascadeDeleteGames } }),
   getRelatedGames: (id: number) => api.get(`/teams/${id}/related-games`),
+  batchChangeLeague: (teamIds: number[], leagueId: number) => 
+    api.post('/teams/batch-change-league', { team_ids: teamIds, league_id: leagueId }),
+  batchChangeTeamAdmin: (teamIds: number[], teamAdminId?: number | null) => 
+    api.post('/teams/batch-change-team-admin', { team_ids: teamIds, team_admin_id: teamAdminId }),
+  getTeamStatistics: (teamId: number, seasonType?: 'regular' | 'playoff') => {
+    const params = seasonType ? { season_type: seasonType } : {};
+    return api.get(`/teams/${teamId}/statistics`, { params });
+  },
 };
 
 // Players API
@@ -126,6 +134,10 @@ export const statisticsApi = {
   getByLeague: (leagueId: number, seasonType?: 'regular' | 'playoff') => {
     const params = seasonType ? { season_type: seasonType } : {};
     return api.get(`/statistics/league/${leagueId}`, { params });
+  },
+  getPlayerAllStatistics: (playerId: number, seasonType?: 'regular' | 'playoff') => {
+    const params = seasonType ? { season_type: seasonType } : {};
+    return api.get(`/statistics/player/${playerId}`, { params });
   },
 };
 

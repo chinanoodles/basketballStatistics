@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 from app.database.base import get_db, init_db
 from app.models.team import Team
 from app.models.player import Player
-from app.models.game import Game, GameStatus
+from app.models.game import Game, GameStatus, GamePlayer
 from app.models.statistic import Statistic
-from app.models.game import GamePlayer
+from app.models.league import League
+from app.models.user import User, UserRole
+from app.models.player_time import PlayerTime  # 导入PlayerTime以解决关系映射问题
 
 # 事件类型映射
 EVENT_MAPPING = {
@@ -53,15 +55,36 @@ def parse_time(time_str):
         return 0
     return 0
 
-def get_or_create_team(db: Session, team_name: str):
+def get_or_create_team(db: Session, team_name: str, league_id: int = None, team_admin_id: int = None):
     """获取或创建球队"""
-    team = db.query(Team).filter(Team.name == team_name).first()
+    # 如果指定了league_id，在同一league内查找
+    if league_id:
+        team = db.query(Team).filter(
+            Team.name == team_name,
+            Team.league_id == league_id
+        ).first()
+    else:
+        team = db.query(Team).filter(Team.name == team_name).first()
+    
     if not team:
-        team = Team(name=team_name, logo=None)
+        team = Team(name=team_name, logo=None, league_id=league_id, team_admin_id=team_admin_id)
         db.add(team)
         db.commit()
         db.refresh(team)
-        print(f"  创建球队: {team_name}")
+        print(f"  创建球队: {team_name} (League ID: {league_id}, Team Admin ID: {team_admin_id})")
+    else:
+        # 更新现有球队的league_id和team_admin_id（如果需要）
+        updated = False
+        if league_id and team.league_id != league_id:
+            team.league_id = league_id
+            updated = True
+        if team_admin_id and team.team_admin_id != team_admin_id:
+            team.team_admin_id = team_admin_id
+            updated = True
+        if updated:
+            db.commit()
+            db.refresh(team)
+            print(f"  更新球队: {team_name} (League ID: {league_id}, Team Admin ID: {team_admin_id})")
     return team
 
 def get_or_create_player(db: Session, team_id: int, player_name: str, player_number: int = None):
@@ -97,7 +120,7 @@ def get_or_create_player(db: Session, team_id: int, player_name: str, player_num
         print(f"    创建球员: {player_name} (#{player_number})")
     return player
 
-def import_game_from_csv(csv_path: str, db: Session):
+def import_game_from_csv(csv_path: str, db: Session, league_id: int = None, team_admin_id: int = None):
     """从CSV文件导入比赛数据"""
     try:
         print(f"\n处理文件: {os.path.basename(csv_path)}")
@@ -139,8 +162,8 @@ def import_game_from_csv(csv_path: str, db: Session):
             away_team_name = 'Team B'
         
         # 检查比赛是否已存在
-        home_team = get_or_create_team(db, home_team_name)
-        away_team = get_or_create_team(db, away_team_name)
+        home_team = get_or_create_team(db, home_team_name, league_id, team_admin_id)
+        away_team = get_or_create_team(db, away_team_name, league_id, team_admin_id)
         
         existing_game = db.query(Game).filter(
             Game.home_team_id == home_team.id,
@@ -187,7 +210,8 @@ def import_game_from_csv(csv_path: str, db: Session):
             date=game_date,
             duration=40,  # 默认40分钟
             quarters=4,
-            status=GameStatus.FINISHED
+            status=GameStatus.FINISHED,
+            league_id=league_id  # 设置联赛ID
         )
         db.add(game)
         db.commit()
@@ -292,6 +316,31 @@ def main():
     db = next(get_db())
     
     try:
+        # 获取或创建 auba-s2 league
+        league = db.query(League).filter(League.name == 'auba-s2').first()
+        if not league:
+            league = League(name='auba-s2', description='AUBA Season 2')
+            db.add(league)
+            db.commit()
+            db.refresh(league)
+            print(f"创建联赛: auba-s2 (ID: {league.id})")
+        else:
+            print(f"使用联赛: auba-s2 (ID: {league.id})")
+        
+        league_id = league.id
+        
+        # 获取 noodles 用户（team_admin）
+        team_admin = db.query(User).filter(
+            User.username == 'noodles',
+            User.role == UserRole.TEAM_ADMIN
+        ).first()
+        if not team_admin:
+            print("警告: 未找到 noodles 用户（team_admin），将不设置领队")
+            team_admin_id = None
+        else:
+            team_admin_id = team_admin.id
+            print(f"使用领队: noodles (ID: {team_admin_id})")
+        
         # CSV文件列表
         csv_files = [
             '../reference/games/auba-s2-mail_vs_auba-s2-和伟_(2025-12-03_9:3)_play_by_play.csv',
@@ -309,7 +358,7 @@ def main():
         if len(sys.argv) > 1:
             csv_files = sys.argv[1:]
         
-        print(f"开始批量导入 {len(csv_files)} 个CSV文件...")
+        print(f"\n开始批量导入 {len(csv_files)} 个CSV文件...")
         print("=" * 60)
         
         success_count = 0
@@ -326,7 +375,7 @@ def main():
                 error_count += 1
                 continue
             
-            result = import_game_from_csv(csv_path, db)
+            result = import_game_from_csv(csv_path, db, league_id, team_admin_id)
             if result:
                 success_count += 1
             elif result is None:

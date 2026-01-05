@@ -13,6 +13,9 @@ import Statistics from './pages/Statistics'
 import PlayByPlay from './pages/PlayByPlay'
 import LeagueManagement from './pages/LeagueManagement'
 import UserManagement from './pages/UserManagement'
+import OffensivePlays from './pages/OffensivePlays'
+import DefensivePlays from './pages/DefensivePlays'
+import PlayerStatistics from './pages/PlayerStatistics'
 
 function App() {
   return (
@@ -73,6 +76,30 @@ function App() {
             element={
               <ProtectedRoute>
                 <TeamManagement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/team/:teamId/offensive-plays"
+            element={
+              <ProtectedRoute>
+                <OffensivePlays />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/team/:teamId/defensive-plays"
+            element={
+              <ProtectedRoute>
+                <DefensivePlays />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/player/:playerId/statistics"
+            element={
+              <ProtectedRoute>
+                <PlayerStatistics />
               </ProtectedRoute>
             }
           />

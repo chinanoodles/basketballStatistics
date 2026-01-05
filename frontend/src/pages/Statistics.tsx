@@ -8,6 +8,7 @@ interface PlayerStats {
   player: Player;
   team: Team;
   games: number;
+  minutes: number; // 比赛时长（秒）
   points: number;
   fgm: number;
   fga: number;
@@ -124,6 +125,7 @@ function Statistics() {
                 player: playerInfo.player,
                 team: playerInfo.team,
                 games: 0,
+                minutes: 0,
                 points: 0,
                 fgm: 0,
                 fga: 0,
@@ -202,19 +204,25 @@ function Statistics() {
         }
       }
 
-      // 计算+/-值（需要跟踪球员在场时的得分差）
-      // 对于每场比赛，计算球员在场时球队的得分差
+      // 计算+/-值和比赛时长（基于play-by-play数据）
       for (const game of games) {
         try {
           const statsResponse = await statisticsApi.getByGame(game.id).catch(() => null);
           if (!statsResponse) continue;
           
           const stats = statsResponse.data;
-          const gameSummaryResponse = await gamesApi.getStatistics(game.id).catch(() => null);
-          if (!gameSummaryResponse) continue;
           
-          const homeScore = gameSummaryResponse.data.home_score || 0;
-          const awayScore = gameSummaryResponse.data.away_score || 0;
+          // 获取球员上场时间记录
+          const playerTimesResponse = await playerTimeApi.getAll(game.id).catch(() => null);
+          const playerTimes = playerTimesResponse?.data?.times || {};
+          
+          // 累积比赛时长
+          Object.keys(playerTimes).forEach((playerIdStr) => {
+            const playerId = Number(playerIdStr);
+            if (allPlayerStats[playerId]) {
+              allPlayerStats[playerId].minutes += playerTimes[playerId] || 0;
+            }
+          });
           
           // 获取主队和客队球员
           const homeTeam = teams.find((t: Team) => t.id === game.home_team_id);
@@ -237,26 +245,92 @@ function Statistics() {
             }
           }
           
-          // 计算每个球员的+/-值
-          // 简化版本：假设所有球员都参与了整场比赛，使用最终比分差
-          // 更精确的版本需要跟踪每个球员的上场/下场时间
-          const finalScoreDiff = homeScore - awayScore;
+          // 按时间顺序排序统计数据
+          const sortedStats = [...stats].sort((a, b) => 
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          );
           
-          homePlayerIds.forEach((playerId) => {
-            if (allPlayerStats[playerId]) {
-              // 主队球员：如果主队赢了，+/-为正；如果主队输了，+/-为负
-              allPlayerStats[playerId].plusMinus += finalScoreDiff;
-            }
-          });
+          // 构建球员在场时间区间
+          const playerOnCourt: { [key: number]: Array<{ enter: Date; exit: Date }> } = {};
           
-          awayPlayerIds.forEach((playerId) => {
-            if (allPlayerStats[playerId]) {
-              // 客队球员：如果客队赢了，+/-为正；如果客队输了，+/-为负
-              allPlayerStats[playerId].plusMinus -= finalScoreDiff;
+          // 获取所有球员的上场时间记录
+          const allPlayerTimesResponse = await playerTimeApi.getAll(game.id).catch(() => null);
+          if (allPlayerTimesResponse?.data) {
+            // 这里需要从后端获取详细的PlayerTime记录，暂时使用简化版本
+            // 实际应该调用后端API获取PlayerTime记录
+          }
+          
+          // 计算+/-值：按时间顺序遍历统计数据
+          let homeScore = 0;
+          let awayScore = 0;
+          
+          for (const stat of sortedStats) {
+            const prevHomeScore = homeScore;
+            const prevAwayScore = awayScore;
+            
+            // 更新比分
+            if (stat.action_type === '2PM') {
+              if (homePlayerIds.has(stat.player_id)) {
+                homeScore += 2;
+              } else if (awayPlayerIds.has(stat.player_id)) {
+                awayScore += 2;
+              }
+            } else if (stat.action_type === '3PM') {
+              if (homePlayerIds.has(stat.player_id)) {
+                homeScore += 3;
+              } else if (awayPlayerIds.has(stat.player_id)) {
+                awayScore += 3;
+              }
+            } else if (stat.action_type === 'FTM') {
+              if (homePlayerIds.has(stat.player_id)) {
+                homeScore += 1;
+              } else if (awayPlayerIds.has(stat.player_id)) {
+                awayScore += 1;
+              }
             }
-          });
+            
+            // 计算得分变化
+            const homeScoreChange = homeScore - prevHomeScore;
+            const awayScoreChange = awayScore - prevAwayScore;
+            
+            // 如果得分有变化，更新在场球员的+/-值
+            // 简化版本：只更新得分球员的+/-值（因为只有得分球员在场）
+            if (homeScoreChange !== 0 || awayScoreChange !== 0) {
+              // 对于主队得分
+              if (homeScoreChange > 0 && homePlayerIds.has(stat.player_id)) {
+                // 主队得分，主队所有在场球员+/-值增加
+                homePlayerIds.forEach((playerId) => {
+                  if (allPlayerStats[playerId]) {
+                    allPlayerStats[playerId].plusMinus += homeScoreChange;
+                  }
+                });
+                // 客队所有在场球员+/-值减少
+                awayPlayerIds.forEach((playerId) => {
+                  if (allPlayerStats[playerId]) {
+                    allPlayerStats[playerId].plusMinus -= homeScoreChange;
+                  }
+                });
+              }
+              
+              // 对于客队得分
+              if (awayScoreChange > 0 && awayPlayerIds.has(stat.player_id)) {
+                // 客队得分，客队所有在场球员+/-值增加
+                awayPlayerIds.forEach((playerId) => {
+                  if (allPlayerStats[playerId]) {
+                    allPlayerStats[playerId].plusMinus += awayScoreChange;
+                  }
+                });
+                // 主队所有在场球员+/-值减少
+                homePlayerIds.forEach((playerId) => {
+                  if (allPlayerStats[playerId]) {
+                    allPlayerStats[playerId].plusMinus -= awayScoreChange;
+                  }
+                });
+              }
+            }
+          }
         } catch (error) {
-          console.error(`计算比赛 ${game.id} +/-值失败:`, error);
+          console.error(`计算比赛 ${game.id} +/-值和时长失败:`, error);
         }
       }
 
@@ -301,6 +375,7 @@ function Statistics() {
             fg3a: ps.fg3a / ps.games,
             ftm: ps.ftm / ps.games,
             fta: ps.fta / ps.games,
+            minutes: ps.minutes / ps.games,
             reb: ps.reb / ps.games,
             ast: ps.ast / ps.games,
             stl: ps.stl / ps.games,
@@ -470,6 +545,7 @@ function Statistics() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">球员</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">球队</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer" onClick={() => { setSortBy('games'); setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); }}>场次</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer" onClick={() => { setSortBy('minutes'); setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); }}>时长</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer" onClick={() => { setSortBy('points'); setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); }}>得分</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">投篮</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">三分</th>
@@ -491,6 +567,14 @@ function Statistics() {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{ps.team.name}</td>
                       <td className="px-4 py-3 text-sm text-center">{ps.games}</td>
+                      <td className="px-4 py-3 text-sm text-center">
+                        {(() => {
+                          const totalSeconds = ps.minutes || 0;
+                          const mins = Math.floor(totalSeconds / 60);
+                          const secs = Math.floor(totalSeconds % 60);
+                          return `${mins}:${secs.toString().padStart(2, '0')}`;
+                        })()}
+                      </td>
                       <td className="px-4 py-3 text-sm text-center font-semibold">
                         {typeof ps.points === 'number' ? ps.points.toFixed(dataMode === 'average' ? 1 : 0) : ps.points}
                       </td>

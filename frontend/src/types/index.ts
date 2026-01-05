@@ -5,6 +5,8 @@ export interface Team {
   name: string;
   logo?: string;
   league_id: number;
+  team_admin_id?: number | null;
+  team_admin_name?: string | null;
   created_at?: string;
 }
 

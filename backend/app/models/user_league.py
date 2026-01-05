@@ -12,3 +12,4 @@ user_league_association = Table(
     Column('created_at', DateTime(timezone=True), server_default=func.now())
 )
 
+

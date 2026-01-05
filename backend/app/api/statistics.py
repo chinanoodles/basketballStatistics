@@ -239,3 +239,74 @@ async def get_league_statistics(
     statistics = query.order_by(Statistic.timestamp.desc()).all()
     return statistics
 
+
+@router.get("/player/{player_id}", response_model=List[StatisticResponse])
+async def get_player_all_statistics(
+    player_id: int,
+    season_type: Optional[str] = Query(None, description="赛季类型: regular 或 playoff"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """获取球员的所有统计数据（跨所有比赛）"""
+    from app.models.player import Player
+    from app.models.team import Team
+    
+    # 验证球员是否存在
+    player = db.query(Player).filter(Player.id == player_id).first()
+    if not player:
+        raise HTTPException(status_code=404, detail="球员不存在")
+    
+    # 获取球员所属球队
+    team = db.query(Team).filter(Team.id == player.team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="球员所属球队不存在")
+    
+    # 权限检查：team_admin可以查看自己管理的球队的球员，管理员可以查看所有球员
+    if current_user.role.value == "admin":
+        pass  # 管理员可以查看所有球员
+    elif current_user.role.value == "team_admin":
+        # team_admin可以查看自己管理的球队的球员或自己league的球员
+        if team.team_admin_id != current_user.id and team.league_id != current_user.league_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="没有权限访问此球员统计"
+            )
+    else:
+        # player只能查看自己league的球员
+        if team.league_id != current_user.league_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="没有权限访问此球员统计"
+            )
+    
+    # 获取球员参与的所有比赛
+    games_query = db.query(Game).filter(
+        ((Game.home_team_id == team.id) | (Game.away_team_id == team.id)),
+        Game.status == "finished"
+    )
+    
+    # 按season_type筛选
+    if season_type:
+        if season_type not in ["regular", "playoff"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="season_type 必须是 'regular' 或 'playoff'"
+            )
+        games_query = games_query.filter(
+            Game.season_type == (SeasonType.REGULAR if season_type == "regular" else SeasonType.PLAYOFF)
+        )
+    
+    games = games_query.all()
+    game_ids = [g.id for g in games]
+    
+    if not game_ids:
+        return []
+    
+    # 获取所有统计数据
+    statistics = db.query(Statistic).filter(
+        Statistic.player_id == player_id,
+        Statistic.game_id.in_(game_ids)
+    ).order_by(Statistic.timestamp.desc()).all()
+    
+    return statistics
+

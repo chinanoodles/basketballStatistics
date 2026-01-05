@@ -41,3 +41,4 @@ function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps)
 
 export default ProtectedRoute;
 
+
