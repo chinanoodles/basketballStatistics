@@ -794,9 +794,15 @@ function TeamManagement() {
                       const pir = playerStat.pir || 0;
                       const plusMinus = playerStat.plus_minus || 0;
                       
-                      // 计算命中率
-                      const fgPercentage = fga > 0 ? ((fgm / fga) * 100).toFixed(1) : '0.0';
-                      const fg3Percentage = fg3a > 0 ? ((fg3m / fg3a) * 100).toFixed(1) : '0.0';
+                      // 计算命中率（使用原始累积数据，而不是格式化后的数据）
+                      // 在场均模式下，需要使用原始累积数据计算命中率
+                      const originalFgm = isAverage && gamesPlayed > 0 ? fgm * gamesPlayed : fgm;
+                      const originalFga = isAverage && gamesPlayed > 0 ? fga * gamesPlayed : fga;
+                      const originalFg3m = isAverage && gamesPlayed > 0 ? fg3m * gamesPlayed : fg3m;
+                      const originalFg3a = isAverage && gamesPlayed > 0 ? fg3a * gamesPlayed : fg3a;
+                      
+                      const fgPercentage = originalFga > 0 ? ((originalFgm / originalFga) * 100).toFixed(1) : '0.0';
+                      const fg3Percentage = originalFg3a > 0 ? ((originalFg3m / originalFg3a) * 100).toFixed(1) : '0.0';
                       
                       // 格式化显示值
                       const formatValue = (value: number) => {

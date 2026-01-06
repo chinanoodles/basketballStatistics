@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { statisticsApi, teamsApi, gamesApi, playersApi, leaguesApi } from '../utils/api';
+import { statisticsApi, teamsApi, gamesApi, playersApi, leaguesApi, playerTimeApi } from '../utils/api';
 import { Player, Team, Statistic, League } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -544,18 +544,18 @@ function Statistics() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">排名</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">球员</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">球队</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer" onClick={() => { setSortBy('games'); setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); }}>场次</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer" onClick={() => { setSortBy('minutes'); setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); }}>时长</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer" onClick={() => { setSortBy('points'); setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); }}>得分</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100" onClick={() => { setSortBy('games'); setSortOrder(sortBy === 'games' && sortOrder === 'desc' ? 'asc' : 'desc'); }}>场次 {sortBy === 'games' && (sortOrder === 'desc' ? '↓' : '↑')}</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100" onClick={() => { setSortBy('minutes'); setSortOrder(sortBy === 'minutes' && sortOrder === 'desc' ? 'asc' : 'desc'); }}>时长 {sortBy === 'minutes' && (sortOrder === 'desc' ? '↓' : '↑')}</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100" onClick={() => { setSortBy('points'); setSortOrder(sortBy === 'points' && sortOrder === 'desc' ? 'asc' : 'desc'); }}>得分 {sortBy === 'points' && (sortOrder === 'desc' ? '↓' : '↑')}</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">投篮</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">三分</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">篮板</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer" onClick={() => { setSortBy('ast'); setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); }}>助攻</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">抢断</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">盖帽</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer" onClick={() => { setSortBy('eff'); setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); }}>EFF</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer" onClick={() => { setSortBy('pir'); setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); }}>PIR</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer" onClick={() => { setSortBy('plusMinus'); setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc'); }}>+/-</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100" onClick={() => { setSortBy('reb'); setSortOrder(sortBy === 'reb' && sortOrder === 'desc' ? 'asc' : 'desc'); }}>篮板 {sortBy === 'reb' && (sortOrder === 'desc' ? '↓' : '↑')}</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100" onClick={() => { setSortBy('ast'); setSortOrder(sortBy === 'ast' && sortOrder === 'desc' ? 'asc' : 'desc'); }}>助攻 {sortBy === 'ast' && (sortOrder === 'desc' ? '↓' : '↑')}</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100" onClick={() => { setSortBy('stl'); setSortOrder(sortBy === 'stl' && sortOrder === 'desc' ? 'asc' : 'desc'); }}>抢断 {sortBy === 'stl' && (sortOrder === 'desc' ? '↓' : '↑')}</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100" onClick={() => { setSortBy('blk'); setSortOrder(sortBy === 'blk' && sortOrder === 'desc' ? 'asc' : 'desc'); }}>盖帽 {sortBy === 'blk' && (sortOrder === 'desc' ? '↓' : '↑')}</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100" onClick={() => { setSortBy('eff'); setSortOrder(sortBy === 'eff' && sortOrder === 'desc' ? 'asc' : 'desc'); }}>EFF {sortBy === 'eff' && (sortOrder === 'desc' ? '↓' : '↑')}</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100" onClick={() => { setSortBy('pir'); setSortOrder(sortBy === 'pir' && sortOrder === 'desc' ? 'asc' : 'desc'); }}>PIR {sortBy === 'pir' && (sortOrder === 'desc' ? '↓' : '↑')}</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100" onClick={() => { setSortBy('plusMinus'); setSortOrder(sortBy === 'plusMinus' && sortOrder === 'desc' ? 'asc' : 'desc'); }}>+/- {sortBy === 'plusMinus' && (sortOrder === 'desc' ? '↓' : '↑')}</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">

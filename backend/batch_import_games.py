@@ -241,12 +241,23 @@ def import_game_from_csv(csv_path: str, db: Session, league_id: int = None, team
             db.add(game_player)
         db.commit()
         
-        # 导入统计数据
+        # 导入统计数据和球员上场时间
         stats_count = 0
+        player_substitutions = []  # [(player_id, quarter, event_type, timestamp), ...]
+        
+        # 计算比赛开始时间（基于第一行数据）
+        game_start_time = game_date
+        
+        # 记录首发球员（他们在第1节开始时就在场上）
+        starter_player_times = {}  # {player_id: enter_time}
+        for player_id in starter_ids:
+            starter_player_times[player_id] = game_start_time
+        
         for row in rows:
             event = row.get('Event', '').strip()
             player_name = row.get('Player', '').strip()
             quarter_str = row.get('Quarter', '1').strip()
+            minutes_str = row.get('Minutes', '').strip()  # 获取时间信息
             
             if not event or not player_name:
                 continue
@@ -255,8 +266,79 @@ def import_game_from_csv(csv_path: str, db: Session, league_id: int = None, team
             if event == 'Shot rejected':
                 continue
             
+            # 解析时间戳
+            try:
+                quarter = int(quarter_str)
+            except:
+                quarter = 1
+            
+            timestamp = game_start_time
+            if minutes_str:
+                try:
+                    # 解析MM:SS格式的时间（剩余时间）
+                    # 例如：40:00表示比赛开始，39:31表示剩余39分31秒
+                    time_parts = minutes_str.split(':')
+                    if len(time_parts) == 2:
+                        remaining_minutes, remaining_seconds = map(int, time_parts)
+                        
+                        # 计算从比赛开始经过的时间（假设每节10分钟）
+                        # 每节10分钟 = 600秒
+                        quarter_duration = 600
+                        quarter_start_seconds = (quarter - 1) * quarter_duration
+                        
+                        # 计算总剩余时间（秒）
+                        total_remaining_seconds = remaining_minutes * 60 + remaining_seconds
+                        
+                        # 计算从该节开始经过的时间（秒）
+                        elapsed_in_quarter = quarter_duration - total_remaining_seconds
+                        
+                        # 计算从比赛开始经过的总时间（秒）
+                        total_elapsed_seconds = quarter_start_seconds + elapsed_in_quarter
+                        
+                        # 计算实际时间戳
+                        from datetime import timedelta
+                        timestamp = game_start_time + timedelta(seconds=total_elapsed_seconds)
+                except Exception as e:
+                    # 如果解析失败，使用节次和行号估算时间
+                    # 使用行号作为时间顺序的参考
+                    row_index = rows.index(row)
+                    from datetime import timedelta
+                    # 假设每行事件间隔约1秒
+                    timestamp = game_start_time + timedelta(seconds=row_index)
+            
             # 映射事件类型
             action_type = EVENT_MAPPING.get(event)
+            
+            # 处理上场/下场事件
+            if event in ['Sub in', 'Sub out']:
+                # 确定球员和球队
+                team_name = row.get('Team', '').strip()
+                if team_name == home_team_name:
+                    player_map = home_player_map
+                elif team_name == away_team_name:
+                    player_map = away_player_map
+                else:
+                    if player_name in home_player_map:
+                        player_map = home_player_map
+                    elif player_name in away_player_map:
+                        player_map = away_player_map
+                    else:
+                        continue
+                
+                if player_name not in player_map:
+                    continue
+                
+                player = player_map[player_name]
+                
+                try:
+                    quarter = int(quarter_str)
+                except:
+                    quarter = 1
+                
+                # 记录替换事件
+                player_substitutions.append((player.id, quarter, action_type, timestamp))
+                continue  # 替换事件不创建统计数据
+            
             if not action_type:
                 # 静默跳过未知事件类型
                 continue
@@ -286,17 +368,104 @@ def import_game_from_csv(csv_path: str, db: Session, league_id: int = None, team
             except:
                 quarter = 1
             
-            # 创建统计数据
+            # 创建统计数据（包含时间戳）
             statistic = Statistic(
                 game_id=game.id,
                 player_id=player.id,
                 quarter=quarter,
-                action_type=action_type
+                action_type=action_type,
+                timestamp=timestamp
             )
             db.add(statistic)
             stats_count += 1
         
         db.commit()
+        
+        # 处理球员上场时间记录
+        from app.models.player_time import PlayerTime
+        from datetime import timedelta
+        
+        # 按时间顺序处理替换事件
+        player_substitutions.sort(key=lambda x: (x[1], x[3]))  # 按节次和时间排序
+        
+        # 跟踪每个球员在每个节次的上场状态
+        player_status = {}  # {player_id: {quarter: {'on_court': bool, 'enter_time': datetime}}}
+        
+        # 初始化首发球员的状态（第1节开始时就在场上）
+        for player_id in starter_ids:
+            if player_id not in player_status:
+                player_status[player_id] = {}
+            player_status[player_id][1] = {
+                'on_court': True,
+                'enter_time': game_start_time
+            }
+        
+        # 计算每节的开始和结束时间（假设每节10分钟）
+        quarter_duration = 600  # 10分钟 = 600秒
+        quarter_times = {}
+        for q in range(1, 5):
+            quarter_start = game_start_time + timedelta(seconds=(q - 1) * quarter_duration)
+            quarter_end = game_start_time + timedelta(seconds=q * quarter_duration)
+            quarter_times[q] = {'start': quarter_start, 'end': quarter_end}
+        
+        # 处理替换事件
+        for player_id, quarter, event_type, timestamp in player_substitutions:
+            if player_id not in player_status:
+                player_status[player_id] = {}
+            if quarter not in player_status[player_id]:
+                # 如果球员在该节次还没有状态，初始化为不在场上
+                player_status[player_id][quarter] = {'on_court': False, 'enter_time': None}
+            
+            if event_type == 'SUB_IN':
+                # 球员上场
+                if not player_status[player_id][quarter]['on_court']:
+                    player_status[player_id][quarter]['on_court'] = True
+                    player_status[player_id][quarter]['enter_time'] = timestamp
+            elif event_type == 'SUB_OUT':
+                # 球员下场
+                if player_status[player_id][quarter]['on_court']:
+                    enter_time = player_status[player_id][quarter]['enter_time']
+                    if enter_time:
+                        # 创建上场时间记录
+                        duration_seconds = (timestamp - enter_time).total_seconds()
+                        if duration_seconds > 0:  # 只记录有效的时间
+                            player_time = PlayerTime(
+                                game_id=game.id,
+                                player_id=player_id,
+                                quarter=quarter,
+                                enter_time=enter_time,
+                                exit_time=timestamp,
+                                duration_seconds=duration_seconds
+                            )
+                            db.add(player_time)
+                    player_status[player_id][quarter]['on_court'] = False
+                    player_status[player_id][quarter]['enter_time'] = None
+        
+        # 处理还在场上的球员（节次结束时仍在场上）
+        for player_id, quarters_data in player_status.items():
+            for quarter, status in quarters_data.items():
+                if status['on_court'] and status['enter_time']:
+                    # 球员还在场上，使用节次结束时间
+                    quarter_end = quarter_times.get(quarter, {}).get('end')
+                    if not quarter_end:
+                        # 如果没有找到节次结束时间，使用比赛结束时间
+                        quarter_end = game_start_time + timedelta(seconds=quarter * quarter_duration)
+                    
+                    duration_seconds = (quarter_end - status['enter_time']).total_seconds()
+                    if duration_seconds > 0:  # 只记录有效的时间
+                        player_time = PlayerTime(
+                            game_id=game.id,
+                            player_id=player_id,
+                            quarter=quarter,
+                            enter_time=status['enter_time'],
+                            exit_time=quarter_end,
+                            duration_seconds=duration_seconds
+                        )
+                        db.add(player_time)
+        
+        db.commit()
+        print(f"  导入 {stats_count} 条统计数据")
+        print(f"  导入 {len(player_substitutions)} 个替换事件")
         print(f"  导入 {stats_count} 条统计数据")
         return game
         
